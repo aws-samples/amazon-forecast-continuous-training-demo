@@ -1,0 +1,76 @@
+#Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: lambda in forecast lambda set
+
+Parameters:
+  S3BucketName:
+    Description: S3 path pointing to raw data
+    Type: String
+
+Resources:
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: lambdapolicy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudwatch:GetMetricStatistics
+            - logs:DescribeLogStreams
+            - logs:GetLogEvents
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            Resource:
+              Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+          - Effect: Allow
+            Action:
+            - forecast:*
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:
+              - Fn::Sub: arn:aws:s3:::${S3BucketName}
+              - Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+
+  Lambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Description: generate default predictor for existing dataset group
+      Runtime: python3.7
+      Role: !GetAtt LambdaRole.Arn
+      FunctionName: sam_forecast_trainDefaultPredictor
+      Handler: trainDefaultPredictor.onEventHandler
+      CodeUri: ./trainDefaultPredictor/
+      MemorySize: 256
+      Timeout: 180
+      ReservedConcurrentExecutions: 1
+      Events:
+        BySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(12 hours)
+      Environment:
+          Variables:
+             S3BucketName: !Ref S3BucketName

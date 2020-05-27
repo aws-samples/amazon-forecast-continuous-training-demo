@@ -1,0 +1,123 @@
+#Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: lambda in forecast lambda set
+
+Parameters:
+  S3BucketName:
+    Description: S3 path pointing to raw data
+    Type: String
+  S3ObjectCreateSNSTopicARN:
+    Description: Topic to receive S3 data creation information
+    Type: String
+
+Resources:
+  ForecastExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: forecast.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /service-role/
+      Policies:
+      - PolicyName: forcast_policy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:  "arn:aws:s3:::*"
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: lambda_policy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - sns:*
+            - sqs:*
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - iam:PassRole
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - forecast:*
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - cloudwatch:GetMetricStatistics
+            - logs:DescribeLogStreams
+            - logs:GetLogEvents
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            Resource:
+              Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:
+              - Fn::Sub: arn:aws:s3:::${S3BucketName}
+              - Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+              - arn:aws:s3:::covid19-lake
+              - arn:aws:s3:::covid19-lake/*
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+
+  LambdaInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt Lambda.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Sub ${AWS::AccountId}
+      SourceArn: !Sub arn:aws:s3:::${S3BucketName}
+
+  Lambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Description: create new Forecast DatasetGroup when new data comes in
+      Runtime: python3.7
+      Role: !GetAtt LambdaRole.Arn
+      FunctionName: sam_forecast_createForecastDataSetGroup
+      Handler: createForecastDataSetGroup.onEventHandler
+      CodeUri: ./createForecastDataSetGroup/
+      MemorySize: 256
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+      Events:
+        BySNS:
+          Type: SNS
+          Properties:
+            Topic: !Ref S3ObjectCreateSNSTopicARN
+            SqsSubscription: True
+
+      Environment:
+          Variables:
+             S3BucketName: !Ref S3BucketName
+             ForecastExecutionRole: !GetAtt ForecastExecutionRole.Arn

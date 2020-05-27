@@ -1,0 +1,243 @@
+#Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#SPDX-License-Identifier: MIT-0
+Description: Create a CodePipeline to build pipeline for forecast-demo
+
+Parameters:
+  CodeCommitRepo:
+    Type: String
+    Description: URL for source code
+    Default: https://github.com/aws-samples/amazon-forecast-continuous-training-demo.git
+  ForecastDemoDataBucketName:
+    Description: S3 path pointing to raw data, please put a unique name here
+    Type: String
+    Default: please-replace-using-a-unique-name-for-your-databucket
+  MetricsNameSpace:
+    Type: String
+    Default: COVID19_Forecast
+  NumberOfForecastsToKeep:
+    Type: Number
+    Default: 8
+
+Resources:
+
+  SNSTopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: "s3.amazonaws.com"
+              Action: SNS:Publish
+              Resource: !Ref S3ObjectNotificationTopic
+              Condition:
+                ArnLike:
+                  aws:SourceArn: !Sub "arn:aws:s3:::${ForecastDemoDataBucketName}"
+        Topics:
+          - !Ref S3ObjectNotificationTopic
+
+
+  S3ObjectNotificationTopic:
+      Type: AWS::SNS::Topic
+
+  SamBucket:
+    Type: AWS::S3::Bucket
+
+  ForecastDemoDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+       BucketName : !Ref ForecastDemoDataBucketName
+       NotificationConfiguration:
+          TopicConfigurations:
+            - Event: s3:ObjectCreated:*
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: prefix
+                      Value: DatasetGroups
+              Topic: !Ref S3ObjectNotificationTopic
+
+  CodeBuildRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName:
+        Fn::Sub: CodePipelineRoleForforecast-demo
+      # 1 hour
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /service-role/
+      Policies:
+        -
+          PolicyName: "CodeBuildPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "events:*"
+                Resource:
+                  - Fn::Sub: arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:Get*"
+                  - "s3:List*"
+                  - "s3:*Object"
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${S3BucketName}
+                    - { S3BucketName: !Ref SamBucket }
+                  - !Sub
+                    - arn:aws:s3:::${S3BucketName}/*
+                    - { S3BucketName: !Ref SamBucket }
+              -
+                Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource:
+                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/forecast-demo-codebuild
+                  - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/forecast-demo-codebuild:*
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                Resource:
+                  - Fn::Sub: arn:aws:s3:::codepipeline-${AWS::Region}-*
+              -
+                Effect: "Allow"
+                Action:
+                  - "codebuild:CreateReportGroup"
+                  - "codebuild:CreateReport"
+                  - "codebuild:UpdateReport"
+                  - "codebuild:BatchPutTestCases"
+                Resource:
+                  - Fn::Sub: arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/forecast-demo-codebuild-*
+              # allow code build to be able to deploy sam
+              -
+                Effect: "Allow"
+                Action:
+                  - "apigateway:*"
+                  - "codedeploy:*"
+                  - "lambda:*"
+                  - "cloudformation:*"
+                  - "iam:GetRole"
+                  - "iam:CreateRole"
+                  - "iam:DeleteRole"
+                  - "iam:PutRolePolicy"
+                  - "iam:AttachRolePolicy"
+                  - "iam:Get*"
+                  - "iam:DeleteRolePolicy"
+                  - "iam:DetachRolePolicy"
+                  - "iam:PassRole"
+                  - "s3:Get*"
+                  - "s3:List*"
+                  - "s3:*Object"
+                  - "sns:*"
+                  - "sqs:*"
+                Resource:
+                  - "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "codecommit:*"
+                Resource: "*"
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    DependsOn: CodeBuildRole
+    Properties:
+      Description: forecast demo codebuild task
+      TimeoutInMinutes: 30
+      Artifacts:
+        Type: no_artifacts
+      Environment:
+        #https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:2.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: True
+        EnvironmentVariables:
+          -
+            Name: SAM_Bucket
+            Type: PLAINTEXT
+            Value: !Ref SamBucket
+          -
+            Name: ForecastDemoDataBucket
+            Type: PLAINTEXT
+            Value: !Ref ForecastDemoDataBucket
+          -
+            Name: S3ObjectCreateSNSTopicARN
+            Type: PLAINTEXT
+            Value: !Ref S3ObjectNotificationTopic
+          -
+            Name: MetricsNameSpace
+            Type: PLAINTEXT
+            Value: !Ref MetricsNameSpace
+          -
+            Name: NumberOfForecastsToKeep
+            Type: PLAINTEXT
+            Value: !Ref NumberOfForecastsToKeep
+      Name: forecast-demo-codebuild
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Source:
+        Type: GITHUB
+        Location: !Ref GitHubRepo
+      Triggers:
+        Webhook: true
+        FilterGroups:
+          - - Type: EVENT
+              Pattern: PUSH
+            - Type: HEAD_REF
+              Pattern: ^refs/heads/.*
+            - Type: FILE_PATH
+              Pattern: README.md
+              ExcludeMatchedPattern: true
+
+  MetricsDashboard:
+    Type: 'AWS::CloudWatch::Dashboard'
+    Properties:
+      DashboardName: ForecastModelPerformance
+      DashboardBody: !Sub |
+            {
+                "widgets": [
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 0,
+                        "width": 18,
+                        "height": 12,
+                        "properties": {
+                            "metrics": [
+                                [ "${MetricsNameSpace}", "ForecastPerformance", "P", "p90", "ModelConfig", "m1", { "id": "m3" } ],
+                                [ "...", "p50", ".", ".", { "id": "m4" } ],
+                                [ "...", "p10", ".", ".", { "id": "m5" } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "start": "-P7D",
+                            "end": "P0D",
+                            "stat": "Maximum",
+                            "period": 86400,
+                            "title": "ForcastTracking"
+                        }
+                    }
+                ]
+            }

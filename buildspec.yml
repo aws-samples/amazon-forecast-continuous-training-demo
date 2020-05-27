@@ -1,0 +1,50 @@
+#Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#SPDX-License-Identifier: MIT-0
+version: 1.0
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.7
+
+  pre_build:
+    commands:
+      - echo Start Deploy Lambda...
+  build:
+    commands:
+      - pip install --user aws-sam-cli
+      - USER_BASE_PATH=$(python -m site --user-base)
+      - export PATH=$PATH:$USER_BASE_PATH/bin
+      - aws s3 cp forecast-model-config.json s3://$ForecastDemoDataBucket/forecast-model-config.json
+      # update Raw data processing logic
+      - sam build -t sam-lambda-rawdataprocessor.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file rawdataprocessor.yml
+      - sam deploy --force-upload true --template-file rawdataprocessor.yml --stack-name sam-lambda-rawdataprocessor --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  S3BucketName=$ForecastDemoDataBucket
+      # update create historical data
+      - sam build -t sam-lambda-createDataSetGroup.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file createDataSetGroup.yml
+      - sam deploy --force-upload true --template-file createDataSetGroup.yml --stack-name sam-lambda-createDataSetGroup --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  S3BucketName=$ForecastDemoDataBucket S3ObjectCreateSNSTopicARN=$S3ObjectCreateSNSTopicARN
+      # update create trainDefaultPredictor
+      - sam build -t sam-lambda-trainDefaultPredictor.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file trainDefaultPredictor.yml
+      - sam deploy --force-upload true --template-file trainDefaultPredictor.yml --stack-name sam-lambda-trainDefaultPredictor --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  S3BucketName=$ForecastDemoDataBucket
+      # update create generateDefaultForecast
+      - sam build -t sam-lambda-generateDefaultForecast.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file generateDefaultForecast.yml
+      - sam deploy --force-upload true --template-file generateDefaultForecast.yml --stack-name sam-lambda-generateDefaultForecast --capabilities CAPABILITY_NAMED_IAM
+      # update forecast data export
+      - sam build -t sam-lambda-generateForecastExport.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file generateForecastExport.yml
+      - sam deploy --force-upload true --template-file generateForecastExport.yml --stack-name sam-lambda-generateForecastExport --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  S3BucketName=$ForecastDemoDataBucket
+      # update forecast metrics generator
+      - sam build -t sam-lambda-forecastMetrics.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file forecastMetrics.yml
+      - sam deploy --force-upload true --template-file forecastMetrics.yml --stack-name sam-lambda-forecastMetrics --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  S3BucketName=$ForecastDemoDataBucket MetricsNameSpace=$MetricsNameSpace
+      # update create deleteExpiredForecast
+      - sam build -t sam-lambda-deleteExpiredForecast.yml
+      - sam package --s3-bucket $SAM_Bucket --output-template-file deleteExpiredForecast.yml
+      - sam deploy --force-upload true --template-file deleteExpiredForecast.yml --stack-name sam-lambda-deleteExpiredForecast --capabilities CAPABILITY_NAMED_IAM --parameter-overrides  NumberOfForecastsToKeep=$NumberOfForecastsToKeep
+
+  post_build:
+    commands:
+      - echo Build and deploy completed at `date`

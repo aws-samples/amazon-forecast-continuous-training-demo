@@ -1,0 +1,62 @@
+{
+ "models":[
+     {
+        "modelName": "m1",
+        "timestamp_col": 0,
+        "target_col":2,
+        "item_col":1,
+        "related_cols": [3],
+        "target_schema":{
+            "Attributes": [
+                {
+                    "AttributeName": "timestamp",
+                    "AttributeType": "timestamp"
+                },
+                {
+                    "AttributeName": "item_id",
+                    "AttributeType": "string"
+                },
+                {
+                    "AttributeName": "target_value",
+                    "AttributeType": "float"
+                }
+            ]
+        },
+        "related_schema":{
+            "Attributes": [
+                {
+                    "AttributeName": "timestamp",
+                    "AttributeType": "timestamp"
+                },
+                {
+                    "AttributeName": "item_id",
+                    "AttributeType": "string"
+                },
+                {
+                    "AttributeName": "totalTestResults",
+                    "AttributeType": "float"
+                }
+            ]
+        },
+        "preditor": {
+          "ForecastHorizon" : 2,
+          "PerformAutoML" : true,
+          "EvaluationParameters" :{
+              "NumberOfBacktestWindows": 1,
+              "BackTestWindowOffset": 2
+          },
+          "InputDataConfig":{
+            "SupplementaryFeatures": [{"Name": "holiday", "Value": "US"}]
+          },
+          "FeaturizationConfig" : {"ForecastFrequency": "D",
+          "Featurizations":
+          [{"AttributeName": "target_value",
+          "FeaturizationPipeline":
+          [{"FeaturizationMethodName": "filling", "FeaturizationMethodParameters": {"aggregation": "max", "backfill": "nan", "frontfill": "none", "middlefill": "nan"}}]}
+          ]}
+
+        }
+
+     }
+ ]
+}

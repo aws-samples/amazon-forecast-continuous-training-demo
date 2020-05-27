@@ -1,0 +1,84 @@
+#Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: lambda in forecast lambda set
+
+
+Resources:
+  ForecastExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: forecast.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /service-role/
+      Policies:
+      - PolicyName: forcast_policy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:  "arn:aws:s3:::*"
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: lambdapolicy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudwatch:GetMetricStatistics
+            - logs:DescribeLogStreams
+            - logs:GetLogEvents
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            Resource:
+              Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+          - Effect: Allow
+            Action:
+            - forecast:*
+            Resource: '*'
+
+  Lambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Description: generate default forecast for existing predictor
+      Runtime: python3.7
+      Role: !GetAtt LambdaRole.Arn
+      FunctionName: sam_forecast_generateDefaultForecast
+      Handler: generateDefaultForecast.onEventHandler
+      CodeUri: ./generateDefaultForecast/
+      MemorySize: 256
+      Timeout: 180
+      ReservedConcurrentExecutions: 1
+      Events:
+        BySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(12 hours)
