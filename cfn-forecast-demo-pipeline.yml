@@ -3,7 +3,7 @@
 Description: Create a CodePipeline to build pipeline for forecast-demo
 
 Parameters:
-  CodeCommitRepo:
+  GitHubRepo:
     Type: String
     Description: URL for source code
     Default: https://github.com/aws-samples/amazon-forecast-continuous-training-demo.git
@@ -199,16 +199,16 @@ Resources:
       Source:
         Type: GITHUB
         Location: !Ref GitHubRepo
-      Triggers:
-        Webhook: true
-        FilterGroups:
-          - - Type: EVENT
-              Pattern: PUSH
-            - Type: HEAD_REF
-              Pattern: ^refs/heads/.*
-            - Type: FILE_PATH
-              Pattern: README.md
-              ExcludeMatchedPattern: true
+#      Triggers:
+#        Webhook: true
+#        FilterGroups:
+#          - - Type: EVENT
+#              Pattern: PUSH
+#            - Type: HEAD_REF
+#              Pattern: ^refs/heads/.*
+#            - Type: FILE_PATH
+#              Pattern: README.md
+#              ExcludeMatchedPattern: true
 
   MetricsDashboard:
     Type: 'AWS::CloudWatch::Dashboard'
