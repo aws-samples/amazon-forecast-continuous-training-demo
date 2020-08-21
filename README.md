@@ -71,6 +71,18 @@ Here's how the dashboard looks like after a few days of continuous forecast trai
 ![Forecast-model-performance](images/model-performance.png)
 
 
+As the model training is fully automatic, after a few months, you can view the performance trending easily (there are some days where the raw data didn't get updated on time, the logic will identify days without no new data and forecast training for those days will be skipped, the dashboard is showing gaps for those days).
+
+
+![Forecast-model-performance-1](images/Performance_Jun_July.png)
+
+
+And here's the most recent forecast performance, 
+
+
+![Forecast-model-performance-2](images/Performance_July_Aug.png)
+
+
 ## Build your own forecast model based on this demo
 
 Follow the steps to setup your own forecast model training pipeline,
