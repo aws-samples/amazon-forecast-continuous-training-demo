@@ -192,6 +192,17 @@ def checkHistoricalDataAvailable(existingDailyDataKeyList,startDate,endDate):
     return True
 
 
+def move_then_delete_path_v2(s3_client, bucket, path1, path2):
+    exportResponse = s3_client.list_objects_v2(
+        Bucket=bucket,
+        Prefix=path1
+        )
+    for content in exportResponse["Contents"]:
+        key=content["Key"]
+        newkey=key.replace(path1,path2)
+        copy_source = {'Bucket': bucket,'Key': key}
+        s3_client.copy_object(CopySource=copy_source, Bucket=bucket, Key=newkey)
+        s3_client.delete_object(Bucket=bucket, Key=key)
 
 def onEventHandler(event, context):
     existingDailyDataKeyList=getExistingHistoricalDataKeyList()
@@ -202,6 +213,18 @@ def onEventHandler(event, context):
     ## Filter out all available successful exports, generating metrics and publish to cloudwatch
     for content in exportResponse["Contents"]:
         key=content["Key"]
+        try:
+            # archieve already export already with metrics published
+            if("_ARCHIVED" in key):
+               forecastDatasetGroupName=key.split("/")[1].replace("_Forecast","")
+               config=loadconfig(forecastDatasetGroupName)
+               exportFolderKey=key.replace("/_ARCHIVED","")
+               newExportFolderKey="Archived/"+exportFolderKey
+               move_then_delete_path_v2(s3_client, S3BucketName, exportFolderKey, newExportFolderKey)
+        except Exception as e:
+            logger.error("Failed to archive forecast performance, export folder= " + exportFolderKey + ", will skip and continue to process next export")
+            logger.error(e)
+            continue
         try:
             if("_SUCCESS" in key):
                forecastDatasetGroupName=key.split("/")[1].replace("_Forecast","")
@@ -220,4 +243,5 @@ def onEventHandler(event, context):
                    logger.info(forecastDatasetGroupName + " not ready to be archived yet")
         except Exception as e:
             logger.error("Failed to evaluate forecast performance, export key= " + key + ", will skip and continue to process next export")
+            logger.error(e)
             continue
