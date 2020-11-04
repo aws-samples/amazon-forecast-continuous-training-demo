@@ -193,6 +193,7 @@ def onEventHandler(event, context):
   #download raw data and process
   download_path = '/tmp/'+tmpkey
   s3_client.download_file('covid19-lake', 'rearc-covid-19-testing-data/csv/states_daily/states_daily.csv', download_path)
+  s3_client.upload_file(download_path, S3BucketName, "latest/states_daily.csv")
   s3_client.upload_file(download_path, S3BucketName, "covid-19-raw/states_daily_raw"+tmpkey)
   logger.info("raw data downloaded from bucket=covid19-lake, key=rearc-covid-19-testing-data/csv/states_daily/states_daily.csv, uploaded to bucket="+S3BucketName+", with key=covid-19-raw/states_daily_raw" + tmpkey)
 
