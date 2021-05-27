@@ -17,6 +17,8 @@ Parameters:
   NumberOfForecastsToKeep:
     Type: Number
     Default: 8
+  SNSKMSKey:
+    Type: String
 
 Resources:
 
@@ -40,15 +42,30 @@ Resources:
 
   S3ObjectNotificationTopic:
       Type: AWS::SNS::Topic
+      Properties:
+        KmsMasterKeyId: !Ref SNSKMSKey
 
   SamBucket:
     Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'AES256'
 
   ForecastDemoDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-       BucketName : !Ref ForecastDemoDataBucketName
-       NotificationConfiguration:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: 'AES256'
+      BucketName : !Ref ForecastDemoDataBucketName
+      NotificationConfiguration:
           TopicConfigurations:
             - Event: s3:ObjectCreated:*
               Filter:

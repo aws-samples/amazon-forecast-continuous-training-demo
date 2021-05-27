@@ -119,5 +119,5 @@ Resources:
 
       Environment:
           Variables:
-             S3BucketName: !Ref S3BucketName
-             ForecastExecutionRole: !GetAtt ForecastExecutionRole.Arn
+            S3BucketName: !Ref S3BucketName
+            ForecastExecutionRole: !GetAtt ForecastExecutionRole.Arn
